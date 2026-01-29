@@ -1,53 +1,49 @@
 const express = require("express");
-const fs = require("fs");
 const app = express();
+app.use(express.json());
+
+const { productsJson } = require("./products_mock");
+
+const { products } = productsJson;
+
+let { count, nextId } = productsJson;
 
 app.get("/products", (req, res) => {
- try {
-const { products = [] } = JSON.parse(
-fs.readFileSync("./products.json", "utf-8"),
-);
+  const category = (req.query.category || "").toLowerCase();
 
-const category = (req.query.category || "").toLowerCase();
+  const subcategory = (req.query.subcategory || "").toLowerCase();
 
-const subcategory = (req.query.subcategory || "").toLowerCase();
+  const search = (req.query.search || "").toLowerCase();
 
-const search = (req.query.search || "").toLowerCase();
+  const filtered = products.filter((p) => {
+    if (category && (p.category || "").toLowerCase() !== category) return false;
 
-const filtered = products.filter((p) => {
+    if (subcategory && (p.subcategory || "").toLowerCase() !== subcategory)
+      return false;
 
-    if (category && (p.category || "").toLowerCase() !== category)
+    if (search) {
+      const text = JSON.stringify(p).toLowerCase();
 
-        return false;
+      if (!text.includes(search)) return false;
+    }
 
-        if (subcategory && (p.subcategory || "").toLowerCase() !== subcategory)
+    return true;
+  });
 
-            return false;
-
-            if (search) {
-
-                const text = JSON.stringify(p).toLowerCase();
-
-                if (!text.includes(search)) return false;
-
-            }
-
-            return true;
+  res.json({ count: filtered.length, products: filtered });
 });
 
-res.json({ count: filtered.length, products: filtered });
+app.post("/products", (req, res) => {
+  const { body } = req;
 
-} catch (err) {
+  const newProduct = { id: nextId, ...body };
 
-    console.error(err);
+  nextId++;
+  count = products.length;
 
-    res.status(500).json({ error: "Could not read products.json" });
- }
+  products.push(newProduct);
 
+  res.status(201).json(newProduct);
 });
-
-app.post('/products', (req, res) => {
-	const {body} = req
-})
 
 app.listen(9000, () => console.log("Server running on port 9000"));
