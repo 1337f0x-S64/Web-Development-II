@@ -46,4 +46,12 @@ app.post("/products", (req, res) => {
   res.status(201).json(newProduct);
 });
 
+  app.put("/products/id", (req, res) => {
+    //
+    //
+    //
+
+    res.status(200).json();
+  })
+
 app.listen(9000, () => console.log("Server running on port 9000"));
