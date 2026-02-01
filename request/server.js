@@ -49,4 +49,27 @@ app.post("/products", (req, res) => {
   res.status(201).json(newProduct); // Responds with the 201 Created status
 });
 
+app.put("/products/:id", (req, res) => {
+  const id = Number(req.params.id);
+
+  const index = products.findIndex((p) => Number(p.id) === id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Product not found" });
+  }
+
+  const updatedProduct = {
+    id,
+    ...req.body,
+  };
+
+  products[index] = updatedProduct;
+
+  count = products.length;
+
+  res.status(200).json({
+    message: "Product updated successfully",
+    product: updatedProduct,
+  });
+});
+
 app.listen(9000, () => console.log("Server running on port 9000"));
