@@ -72,4 +72,27 @@ app.put("/products/:id", (req, res) => {
   });
 });
 
+app.delete("/products/:id", (req, res, next) => {
+  const id = Number(req.params.id);
+
+  const index = products.findIndex((p) => Number(p.id) === id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Product not found" });
+  }
+
+  const deletedProduct = {
+    id,
+    ...req.body,
+  };
+
+  
+  ///
+  ///
+
+  res.status(204).json({
+    message: "Product deleted succesfully",
+    ///product: deletedProduct,
+  })
+})
+
 app.listen(9000, () => console.log("Server running on port 9000"));
