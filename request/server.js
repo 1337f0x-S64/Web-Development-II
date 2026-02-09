@@ -1,6 +1,49 @@
 const express = require("express");
 const app = express();
+const {Sequelize, DataTypes} = require("sequelize")
 app.use(express.json()); // Added middleware to parse JSON bodies
+
+const conn = new Sequelize('products_inventory', 'root', '123456', {
+  host: 'localhost',
+  dialect: 'mysql'
+})
+
+conn.define("Category",{
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false
+  }
+},{})
+
+conn.define("Product",{
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false
+  }
+})
+conn.sync()
+
+/*conn.authenticate().then(() => {
+  console.log("Connected")
+}).catch(e => console.log(e))
+*/
+
+//  const connect = async (callback) => {
+//    try{
+//      await conn.authenticate()
+//      console.log("Connected")
+//      callback()
+//    }catch(e){
+//      console.log(e)
+//    }finally{
+//      await conn.close()
+//       console.log("Connection closed")
+//    }
+//  }
+
+// connect(() => console.log("We are querying some elements."))
+
+// connect(() => console.log("We are updating other elements."))
 
 // In memory data module
 const { productsJson } = require("./products_mock");
