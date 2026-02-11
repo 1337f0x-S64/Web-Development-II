@@ -67,6 +67,19 @@ Subcategory.belongsTo(Category, {
 })
 conn.sync({force:true})
 
+function fillingCategories(){
+  /**
+   * 1. Retrieving all the catefories from products.json
+   * 2. Filtering out only the unique categories
+   * 3. Sort categories alphabetically and in ascending order
+   * 4. Register the categories in the database
+   */
+  const {} = JSON.Parse(fs.ReadFileSync("products.json", {encoding: "utf8"}))
+  const categories = new Set(products.map(product => product.category))
+  console.log(categories)
+}
+
+fillingCategories()
 
 
 /*conn.authenticate().then(() => {
