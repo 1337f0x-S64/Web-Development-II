@@ -1,6 +1,6 @@
 const express = require("express");
 const app = express();
-const {Sequelize, DataTypes, DOUBLE} = require("sequelize")
+const {Sequelize, DataTypes} = require("sequelize")
 app.use(express.json()); // Added middleware to parse JSON bodies
 
 const conn = new Sequelize('products_inventory', 'root', '123456', {
@@ -8,9 +8,21 @@ const conn = new Sequelize('products_inventory', 'root', '123456', {
   dialect: 'mysql'
 })
 
+
 const Category = conn.define("Category",{
   name: {
     type: DataTypes.STRING,
+    allowNull: false
+  }
+})
+
+const Subcategory = conn.define("Subcategory", {
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  category_id : {
+    type: DataTypes.INTEGER,
     allowNull: false
   }
 })
@@ -40,15 +52,22 @@ const Product = conn.define("Product",{
     allowNull: false,
     defaultValue: 1
   },
-  category_id: {
-    type: DataTypes.INTEGER
+  subcategory_id: {
+    type: DataTypes.INTEGER,
+    allowNull: false
   }
 })
 
-Product.belongsTo(Category, {
-  foreignKey:"category_id"
+Product.belongsTo(Subcategory, {
+  foreignKey:"subcategory_id"
+})
+
+Subcategory.belongsTo(Category, {
+  foreignKey: "category_id"
 })
 conn.sync({force:true})
+
+
 
 /*conn.authenticate().then(() => {
   console.log("Connected")
