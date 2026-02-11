@@ -1,6 +1,6 @@
 const express = require("express");
 const app = express();
-const {Sequelize, DataTypes} = require("sequelize")
+const {Sequelize, DataTypes, DOUBLE} = require("sequelize")
 app.use(express.json()); // Added middleware to parse JSON bodies
 
 const conn = new Sequelize('products_inventory', 'root', '123456', {
@@ -8,20 +8,47 @@ const conn = new Sequelize('products_inventory', 'root', '123456', {
   dialect: 'mysql'
 })
 
-conn.define("Category",{
-  name: {
-    type: DataTypes.STRING,
-    allowNull: false
-  }
-},{})
-
-conn.define("Product",{
+const Category = conn.define("Category",{
   name: {
     type: DataTypes.STRING,
     allowNull: false
   }
 })
-conn.sync()
+
+const Product = conn.define("Product",{
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  price: {
+    type: DataTypes.DOUBLE.UNSIGNED,
+    allowNull: false,
+    defaultValue: 0
+  },
+  currency: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: "USD"
+  },
+  stock: {
+    type: DataTypes.INTEGER.UNSIGNED,
+    allowNull: false,
+    defaultValue: 0
+  },
+  rating: {
+    type: DataTypes.FLOAT.UNSIGNED,
+    allowNull: false,
+    defaultValue: 1
+  },
+  category_id: {
+    type: DataTypes.INTEGER
+  }
+})
+
+Product.belongsTo(Category, {
+  foreignKey:"category_id"
+})
+conn.sync({force:true})
 
 /*conn.authenticate().then(() => {
   console.log("Connected")
