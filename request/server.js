@@ -73,16 +73,34 @@ conn.sync({ force: true });
 
 function fillingCategories() {
   /**
-   * 1. Retrieving all the catefories from products.json
+   * 1. Retrieving all the categories from products.json
    * 2. Filtering out only the unique categories
    * 3. Sort categories alphabetically and in ascending order
    * 4. Register the categories in the database
    */
-  const { products } = JSON.parse(
+  const { products: fileProducts } = JSON.parse(
     fs.readFileSync("products.json", { encoding: "utf8" }),
   );
-  const categories = new Set(products.map((product) => product.category));
-  console.log(categories);
+
+  // 2) Unique categories (ignore empty/null, normalize whitespace)
+  const categories = Array.from(
+    new Set(
+      fileProducts
+        .map((p) => (p.category ?? "").toString().trim())
+        .filter((c) => c.length > 0),
+    ),
+  );
+
+  // 3) Sort categories alphabetically (ascending)
+  categories.sort((a, b) => a.localeCompare(b));
+
+  // 4) Register categories in DB (idempotent)
+  return Category.bulkCreate(
+    categories.map((name) => ({ name })),
+    { ignoreDuplicates: true },
+  )
+    .then(() => console.log(`Inserted ${categories.length} categories.`))
+    .catch((e) => console.error(e));
 }
 
 fillingCategories();
