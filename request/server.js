@@ -1,86 +1,91 @@
+// Source - https://stackoverflow.com/a/43171719
+// Posted by phihag
+// Retrieved 2026-02-11, License - CC BY-SA 3.0
+
+const fs = require("fs");
 const express = require("express");
 const app = express();
-const {Sequelize, DataTypes} = require("sequelize")
+const { Sequelize, DataTypes } = require("sequelize");
 app.use(express.json()); // Added middleware to parse JSON bodies
 
-const conn = new Sequelize('products_inventory', 'root', '123456', {
-  host: 'localhost',
-  dialect: 'mysql'
-})
+const conn = new Sequelize("products_inventory", "root", "12345678", {
+  host: "localhost",
+  dialect: "mysql",
+});
 
-
-const Category = conn.define("Category",{
+const Category = conn.define("Category", {
   name: {
     type: DataTypes.STRING,
-    allowNull: false
-  }
-})
+    allowNull: false,
+  },
+});
 
 const Subcategory = conn.define("Subcategory", {
   name: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: false,
   },
-  category_id : {
+  category_id: {
     type: DataTypes.INTEGER,
-    allowNull: false
-  }
-})
+    allowNull: false,
+  },
+});
 
-const Product = conn.define("Product",{
+const Product = conn.define("Product", {
   name: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: false,
   },
   price: {
     type: DataTypes.DOUBLE.UNSIGNED,
     allowNull: false,
-    defaultValue: 0
+    defaultValue: 0,
   },
   currency: {
     type: DataTypes.STRING,
     allowNull: false,
-    defaultValue: "USD"
+    defaultValue: "USD",
   },
   stock: {
     type: DataTypes.INTEGER.UNSIGNED,
     allowNull: false,
-    defaultValue: 0
+    defaultValue: 0,
   },
   rating: {
     type: DataTypes.FLOAT.UNSIGNED,
     allowNull: false,
-    defaultValue: 1
+    defaultValue: 1,
   },
   subcategory_id: {
     type: DataTypes.INTEGER,
-    allowNull: false
-  }
-})
+    allowNull: false,
+  },
+});
 
 Product.belongsTo(Subcategory, {
-  foreignKey:"subcategory_id"
-})
+  foreignKey: "subcategory_id",
+});
 
 Subcategory.belongsTo(Category, {
-  foreignKey: "category_id"
-})
-conn.sync({force:true})
+  foreignKey: "category_id",
+});
+conn.sync({ force: true });
 
-function fillingCategories(){
+function fillingCategories() {
   /**
    * 1. Retrieving all the catefories from products.json
    * 2. Filtering out only the unique categories
    * 3. Sort categories alphabetically and in ascending order
    * 4. Register the categories in the database
    */
-  const {} = JSON.Parse(fs.ReadFileSync("products.json", {encoding: "utf8"}))
-  const categories = new Set(products.map(product => product.category))
-  console.log(categories)
+  const { products } = JSON.parse(
+    fs.readFileSync("products.json", { encoding: "utf8" }),
+  );
+  const categories = new Set(products.map((product) => product.category));
+  console.log(categories);
 }
 
-fillingCategories()
-
+fillingCategories();
 
 /*conn.authenticate().then(() => {
   console.log("Connected")
