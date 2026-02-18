@@ -1,7 +1,3 @@
-// Source - https://stackoverflow.com/a/43171719
-// Posted by phihag
-// Retrieved 2026-02-11, License - CC BY-SA 3.0
-
 const fs = require("fs");
 const express = require("express");
 const app = express();
@@ -9,9 +5,7 @@ const { Sequelize, DataTypes } = require("sequelize");
 
 app.use(express.json()); // parse JSON bodies
 
-// -------------------------
 // Sequelize / MySQL setup
-// -------------------------
 const conn = new Sequelize("products_inventory", "root", "12345678", {
   host: "localhost",
   dialect: "mysql",
@@ -225,7 +219,5 @@ app.get("/404", (req, res) => {
   res.status(404).json({ error: "Product not found" });
 });
 
-// -------------------------
 // Server start (separate, placed after /404)
-// -------------------------
 app.listen(9000, () => console.log("Server running on port 9000 (FILE CRUD)"));
