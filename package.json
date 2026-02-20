@@ -1,5 +1,26 @@
 {
   "dependencies": {
     "mongoose": "^9.2.1"
-  }
+  },
+  "name": "web-development-ii",
+  "version": "1.0.0",
+  "description": "This repository is for the Web Development II class, where various assignments related to the class will be added over time.",
+  "main": "server.js",
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/1337f0x-S64/Web-Development-II.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/1337f0x-S64/Web-Development-II/issues"
+  },
+  "homepage": "https://github.com/1337f0x-S64/Web-Development-II#readme"
 }
