@@ -1,24 +1,43 @@
+require("dotenv").config();
 const express = require("express");
 const app = express();
-const { Sequelize, DataTypes } = require("sequelize");
-app.use(express.json()); // Added middleware to parse JSON bodies
+const { Sequelize, DataTypes, Op } = require("sequelize");
 
-const conn = new Sequelize("products_inventory", "root", "12345678", {
-  host: "localhost",
-  dialect: "mysql",
-});
+app.use(express.json());
+
+// Storage selector (fs or db)
+const DEFAULT_STORE = (process.env.STORAGE || "fs").toLowerCase();
+
+function getStore(req) {
+  const q = (req.query.store || "").toLowerCase().trim();
+  return q === "db" || q === "fs" ? q : DEFAULT_STORE;
+}
+
+// DATABASE SETUP (using .env values)
+const conn = new Sequelize(
+  process.env.DB_NAME,
+  process.env.DB_USER,
+  process.env.DB_PASS,
+  {
+    host: process.env.DB_HOST,
+    dialect: "mysql",
+    logging: false,
+  },
+);
 
 const Category = conn.define("Category", {
   name: {
     type: DataTypes.STRING,
     allowNull: false,
+    unique: true,
   },
 });
 
-const Subcategory = conn.define("Subcategory", {
+const SubCategory = conn.define("SubCategory", {
   name: {
     type: DataTypes.STRING,
     allowNull: false,
+    unique: true,
   },
   category_id: {
     type: DataTypes.INTEGER,
@@ -30,6 +49,7 @@ const Product = conn.define("Product", {
   name: {
     type: DataTypes.STRING,
     allowNull: false,
+    unique: true,
   },
   price: {
     type: DataTypes.DOUBLE.UNSIGNED,
@@ -57,28 +77,31 @@ const Product = conn.define("Product", {
   },
 });
 
-Product.belongsTo(Subcategory, {
-  foreignKey: "subcategory_id",
-});
+SubCategory.belongsTo(Category, { foreignKey: "category_id" });
+Product.belongsTo(SubCategory, { foreignKey: "subcategory_id" });
 
-Subcategory.belongsTo(Category, {
-  foreignKey: "category_id",
-});
-conn.sync({ force: true });
+// Create tables if missing
+(async () => {
+  try {
+    await conn.authenticate();
+    await conn.sync();
+    console.log("DB connected & synced");
+  } catch (e) {
+    console.error("DB init error:", e.message);
+  }
+})();
 
-// In memory data module
+// IN-MEMORY DATA (FS version)
 const { productsJson } = require("./products_mock.js");
-
 const { products } = productsJson;
 
-// eslint-disable-next-line no-unused-vars
 let { count, nextId } = productsJson;
 
-// Middleware to validate product payload
+// Middleware
 function validateProductPayload(req, res, next) {
   const body = req.body || {};
-
   const requiredFields = ["name", "category", "subcategory"];
+
   const missing = requiredFields.filter((f) => {
     const v = body[f];
     return typeof v !== "string" || v.trim() === "";
@@ -94,8 +117,7 @@ function validateProductPayload(req, res, next) {
   next();
 }
 
-// Middleware to validate a product's existence
-function productExists(req, res, next) {
+function productExistsFS(req, res, next) {
   const id = Number(req.params.id);
   const index = products.findIndex((p) => Number(p.id) === id);
 
@@ -107,80 +129,210 @@ function productExists(req, res, next) {
   next();
 }
 
-// Improved filtering and search functionality
-app.get("/products", (req, res) => {
-  const category = (req.query.category || "").toLowerCase();
+// DB Helpers
+async function dbEnsureCategoryAndSubcategory(categoryName, subcategoryName) {
+  let category = await Category.findOne({ where: { name: categoryName } });
+  if (!category) category = await Category.create({ name: categoryName });
 
-  const subcategory = (req.query.subcategory || "").toLowerCase();
+  let sub = await SubCategory.findOne({ where: { name: subcategoryName } });
+  if (!sub) {
+    sub = await SubCategory.create({
+      name: subcategoryName,
+      category_id: category.id,
+    });
+  }
 
-  const search = (req.query.search || "").toLowerCase();
+  return { category, subcategory: sub };
+}
 
-  const filtered = products.filter((p) => {
-    if (category && (p.category || "").toLowerCase() !== category) return false;
+function dbProductToApiShape(row) {
+  const sub = row.SubCategory;
+  const cat = sub?.Category;
 
-    if (subcategory && (p.subcategory || "").toLowerCase() !== subcategory)
-      return false;
-
-    if (search) {
-      const text = JSON.stringify(p).toLowerCase();
-
-      if (!text.includes(search)) return false;
-    }
-
-    return true;
-  });
-
-  res.json({ count: filtered.length, products: filtered });
-});
-
-// View a single product using the existence middleware
-app.get("/products/:id", productExists, (req, res) => {
-  res.json(req.product);
-});
-
-// Added endpoint to create a new product
-app.post("/products", (req, res) => {
-  const { body } = req;
-
-  const newProduct = { ...body, id: nextId };
-
-  nextId++; // Allows auto incremnting ID for new products
-  count = products.length;
-
-  products.push(newProduct);
-
-  res.status(201).json(newProduct); // Responds with the 201 Created status
-});
-
-// Refactored product update endpoint to use middlewares
-app.put("/products/:id", productExists, validateProductPayload, (req, res) => {
-  const id = req.productId;
-
-  const updatedProduct = {
-    id, // keep id first
-    ...req.body,
+  return {
+    id: row.id,
+    name: row.name,
+    price: row.price,
+    currency: row.currency,
+    stock: row.stock,
+    rating: row.rating,
+    subcategory: sub?.name ?? null,
+    category: cat?.name ?? null,
   };
+}
 
-  products[req.productIndex] = updatedProduct;
-  count = products.length;
+// ROUTES
 
-  res.status(200).json({
-    message: "Product updated successfully",
-    product: updatedProduct,
-  });
+app.get("/products", async (req, res) => {
+  const store = getStore(req);
+
+  // ---------- File System ----------
+  if (store === "fs") {
+    const category = (req.query.category || "").toLowerCase();
+    const subcategory = (req.query.subcategory || "").toLowerCase();
+    const search = (req.query.search || "").toLowerCase();
+
+    const filtered = products.filter((p) => {
+      if (category && (p.category || "").toLowerCase() !== category)
+        return false;
+      if (subcategory && (p.subcategory || "").toLowerCase() !== subcategory)
+        return false;
+      if (search && !JSON.stringify(p).toLowerCase().includes(search))
+        return false;
+      return true;
+    });
+
+    return res.json({ store, count: filtered.length, products: filtered });
+  }
+
+  // ---------- MySQL Database ----------
+  try {
+    const category = (req.query.category || "").trim();
+    const subcategory = (req.query.subcategory || "").trim();
+    const search = (req.query.search || "").trim();
+
+    const where = {};
+    if (search) where.name = { [Op.like]: `%${search}%` };
+
+    const include = [
+      {
+        model: SubCategory,
+        required: !!(category || subcategory),
+        ...(subcategory ? { where: { name: subcategory } } : {}),
+        include: [
+          {
+            model: Category,
+            required: !!category,
+            ...(category ? { where: { name: category } } : {}),
+          },
+        ],
+      },
+    ];
+
+    const rows = await Product.findAll({ where, include });
+    const out = rows.map(dbProductToApiShape);
+
+    return res.json({ store, count: out.length, products: out });
+  } catch (e) {
+    return res.status(500).json({ error: "DB error", details: e.message });
+  }
 });
 
-// Added endpoint to delete a product using existence middleware
-app.delete("/products/:id", productExists, (req, res) => {
-  products.splice(req.productIndex, 1);
-  count = products.length;
+app.get("/products/:id", async (req, res) => {
+  const store = getStore(req);
 
-  res.sendStatus(204);
+  if (store === "fs") {
+    return productExistsFS(req, res, () => res.json(req.product));
+  }
+
+  try {
+    const id = Number(req.params.id);
+    const row = await Product.findByPk(id, {
+      include: [{ model: SubCategory, include: [Category] }],
+    });
+
+    if (!row) return res.status(404).json({ error: "Product not found" });
+    return res.json(dbProductToApiShape(row));
+  } catch (e) {
+    return res.status(500).json({ error: "DB error", details: e.message });
+  }
 });
 
-// Error endpoint for non-existing products
+app.post("/products", validateProductPayload, async (req, res) => {
+  const store = getStore(req);
+
+  if (store === "fs") {
+    const newProduct = { id: nextId++, ...req.body };
+    products.push(newProduct);
+    count = products.length;
+    return res.status(201).json(newProduct);
+  }
+
+  try {
+    const { subcategory } = await dbEnsureCategoryAndSubcategory(
+      req.body.category.trim(),
+      req.body.subcategory.trim(),
+    );
+
+    const created = await Product.create({
+      name: req.body.name.trim(),
+      price: req.body.price ?? 0,
+      currency: req.body.currency ?? "USD",
+      stock: req.body.stock ?? 0,
+      rating: req.body.rating ?? 1,
+      subcategory_id: subcategory.id,
+    });
+
+    const full = await Product.findByPk(created.id, {
+      include: [{ model: SubCategory, include: [Category] }],
+    });
+
+    return res.status(201).json(dbProductToApiShape(full));
+  } catch (e) {
+    return res.status(500).json({ error: "DB error", details: e.message });
+  }
+});
+
+app.put("/products/:id", validateProductPayload, async (req, res) => {
+  const store = getStore(req);
+
+  if (store === "fs") {
+    return productExistsFS(req, res, () => {
+      const updated = { id: req.productId, ...req.body };
+      products[req.productIndex] = updated;
+      return res.json({ message: "Updated", product: updated });
+    });
+  }
+
+  try {
+    const row = await Product.findByPk(req.params.id);
+    if (!row) return res.status(404).json({ error: "Product not found" });
+
+    const { subcategory } = await dbEnsureCategoryAndSubcategory(
+      req.body.category.trim(),
+      req.body.subcategory.trim(),
+    );
+
+    await row.update({
+      name: req.body.name.trim(),
+      price: req.body.price ?? row.price,
+      currency: req.body.currency ?? row.currency,
+      stock: req.body.stock ?? row.stock,
+      rating: req.body.rating ?? row.rating,
+      subcategory_id: subcategory.id,
+    });
+
+    return res.json({ message: "Updated successfully" });
+  } catch (e) {
+    return res.status(500).json({ error: "DB error", details: e.message });
+  }
+});
+
+app.delete("/products/:id", async (req, res) => {
+  const store = getStore(req);
+
+  if (store === "fs") {
+    return productExistsFS(req, res, () => {
+      products.splice(req.productIndex, 1);
+      return res.sendStatus(204);
+    });
+  }
+
+  try {
+    const deleted = await Product.destroy({ where: { id: req.params.id } });
+    if (!deleted) return res.status(404).json({ error: "Product not found" });
+    return res.sendStatus(204);
+  } catch (e) {
+    return res.status(500).json({ error: "DB error", details: e.message });
+  }
+});
+
+// 404
 app.get("/404", (req, res) => {
   res.status(404).json({ error: "Product not found" });
 });
 
-app.listen(9000, () => console.log("Server running on port 9000"));
+// Start server using PORT from .env
+app.listen(process.env.PORT || 9000, () => {
+  console.log(`Server running on port ${process.env.PORT}`);
+});
