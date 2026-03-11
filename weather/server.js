@@ -3,7 +3,8 @@ const mongoose = require("mongoose")
 const { Schema } = mongoose
 const { APP_PORT, DATABASE_HOST, DATABASE_PORT, DATABASE_NAME, WEATHER_API_URI, WEATHER_API_KEY, MAX_TEMP_AGE } = process.env
 mongoose.connect(`mongodb://${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_NAME}`)
-
+ 
+ 
  
 /**
  * API URI TEMPLATE 
@@ -23,55 +24,69 @@ const Temp = mongoose.model("Temp", tempSchema)
 const app = express()
  
  
-async function fetchWeather(cityName)
-{
+async function fetchWeather(cityName) {
     console.log("Server is fetching weather")
     let temp
-    try
-    {
+    try {
  
  
         const resp = await fetch(`${WEATHER_API_URI}?q=${cityName}&appid=${WEATHER_API_KEY}&units=metric`)
         const data = await resp.json()
         temp = data
-    }catch(e)
-    {
+    } catch (e) {
         temp = null
-    }finally
-    {
+    } finally {
         return temp
     }
 }
  
  
-app.get("/", async (req, res) => {
+/**
+ * 
+ * @param {Temp} temp Mongoose Object
+ * @param {Number} LIMIT miliseconds 
+ */
+function isTempWithinRange(temp, LIMIT = MAX_TEMP_AGE * 60 * 1000) {
+    return (Date.now() - temp.createdAt.getTime()) <= LIMIT
+}
+ 
+ 
+app.get("/", async (req, res, next) => {
  
  
     //query the last temperature in the database
-    let last = await Temp.findOne().sort({createdAt:'desc'})
-    if(last){
-      if((Date.now() - last.createdAt.getTime()) <= MAX_TEMP_AGE * 60 * 1000){
-        res.json(last)
+    let lastTemp = await Temp.findOne().sort({ createdAt: 'desc' })
+    if (lastTemp && isTempWithinRange(lastTemp)) {
+        res.json(lastTemp)
         return
-      }
-      const {main:{temp}, name, weather} = await fetchWeather("Managua")
-      last =  {value:temp, city:name, weather:weather[0].main, weather_description:weather[0].description}
-      await Temp.create(last)
-    } else{
-      //if no temp was found, query the temperature in the weather api
-      const {main:{temp}, name, weather} = await fetchWeather("Managua")
-      //then store the temperature in the database and return that info
-      last =  {value:temp, city:name, weather:weather[0].main, weather_description:weather[0].description}
-      await Temp.create(last)
     }
-    //if there is a temp make sure it is as old as 15 minutes
-    //if it is older then 15 minutes, re-query the temperature in the weather api
-    //then return the value
-    res.json(last)
+ 
+ 
+    //if no temp was found or temperature is out of range, query the temperature in the weather api
+    const { main: { temp }, name, weather } = await fetchWeather("Managua")
+    //then store the temperature in the database and return that info
+    lastTemp = new Temp({ value: temp, city: name, weather: weather[0].main, weather_description: weather[0].description })
+    lastTemp.save().then(() => {
+        res.json(lastTemp)
+    }).catch(e => next(e))
+    
 })
  
  
 app.get("/dashboard", (req, res) => { })
  
  
-app.listen(APP_PORT,  () => console.log(`Server is listening at ${APP_PORT}`))
+app.use((req, res, next) => {
+    res.status(404)
+    res.json({err:"404 Not Found"})
+})
+ 
+ 
+app.use((err, req, res, next)=> {
+    console.log(err)
+    res.status(500)
+    res.json({err: "500 server error"})
+})
+ 
+ 
+app.listen(APP_PORT, () => console.log(`Server is listening at ${APP_PORT}`))
