@@ -18,7 +18,7 @@ const User = Mongoose.model("User", userSchema);
 
 const app = express();
 
-app.use(express.json);
+app.use(express.json());
 app.use(express.urlencoded());
 
 app.use(
